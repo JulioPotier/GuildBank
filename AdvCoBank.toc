@@ -1,0 +1,14 @@
+## Interface: 11507
+## Version: 0.1.0
+## Title: AdvCoBank
+## Notes: AdvCoBank helper addon
+## Forked from Bean Bank
+## Author: Kirby2112
+## SavedVariables: AdvCoBankDB
+
+embeds.xml
+
+Core.lua
+BeanBank.lua
+PersonalBank.lua
+DB.lua
