@@ -1,4 +1,5 @@
 local addon = BeanBank
+local rarities = addon.CONSTANTS and addon.CONSTANTS.rarities or { "poor", "common", "uncommon", "rare", "epic", "legendary" }
 
 local function ensurePersonalDB()
     if not addon.db then return end
@@ -16,7 +17,7 @@ local function ensurePersonalDB()
         -- Old schema had a single merged table; keep it as bankItems so nothing is lost.
         pb.characters[legacyChar].bankItems = pb.characters[legacyChar].bankItems or pb.items
         pb.characters[legacyChar].bagItems = pb.characters[legacyChar].bagItems or {}
-        pb.characters[legacyChar].settings = pb.characters[legacyChar].settings or { shareBank = true, shareBags = false }
+        pb.characters[legacyChar].settings = pb.characters[legacyChar].settings or { shareBank = false, shareBags = false }
         pb.characters[legacyChar].lastCapture = pb.lastCapture or pb.characters[legacyChar].lastCapture or 0
         pb.items = nil
         pb.character = nil
@@ -41,8 +42,8 @@ local function ensurePersonalDB()
 
             charData.bankItems = charData.bankItems or {}
             charData.bagItems = charData.bagItems or {}
-            charData.settings = charData.settings or { shareBank = true, shareBags = false }
-            if charData.settings.shareBank == nil then charData.settings.shareBank = true end
+            charData.settings = charData.settings or { shareBank = false, shareBags = false }
+            if charData.settings.shareBank == nil then charData.settings.shareBank = false end
             if charData.settings.shareBags == nil then charData.settings.shareBags = false end
         end
     end
@@ -76,6 +77,18 @@ function addon:ResetPersonal(characterName)
     pb.lastCharacter = bestChar
 end
 
+--- Mise à jour de l'or du personnage connecté (GetMoney) — ne nécessite pas la banque ni le partage sacs/banque.
+function addon:RefreshPersonalCharacterMoney()
+    ensurePersonalDB()
+    if not self.db or not self.db.factionrealm or not self.db.factionrealm.personalBank then
+        return
+    end
+    local pb = self.db.factionrealm.personalBank
+    local char = UnitNameUnmodified and UnitNameUnmodified("player") or UnitName("player") or "Unknown"
+    pb.characters[char] = pb.characters[char] or {}
+    pb.characters[char].money = GetMoney()
+end
+
 function addon:CapturePersonalBankSnapshot()
     ensurePersonalDB()
     if not self.db then
@@ -84,6 +97,8 @@ function addon:CapturePersonalBankSnapshot()
     if not self.db.factionrealm or not self.db.factionrealm.personalBank then
         return
     end
+
+    self:RefreshPersonalCharacterMoney()
 
     -- Per-character preferences live in db.char, but we store them with the snapshot in the shared DB.
     local share = (self.db.char and self.db.char.personal) or {}
@@ -118,6 +133,27 @@ function addon:CapturePersonalBankSnapshot()
         else
             itemIdWithSuffix = tostring(itemIdWithSuffix)
         end
+
+        -- Respect the same sync filtering rules as Banking:
+        -- - whitelist always allowed
+        -- - blacklist always denied
+        -- - otherwise, allowed only if item's quality is enabled in db.profile.itemRarities (when quality exists)
+        local prof = self.db and self.db.profile or nil
+        local wl = prof and prof.whitelist or nil
+        local bl = prof and prof.blacklist or nil
+        local qset = prof and prof.itemRarities or nil
+        local itemIsWhitelisted = wl and wl[itemIdWithSuffix]
+        local itemIsBlacklisted = bl and bl[itemIdWithSuffix]
+        if item.quality ~= nil and qset then
+            local rname = rarities[(tonumber(item.quality) or -1) + 1]
+            if rname and qset[rname] ~= nil then
+                itemIsWhitelisted = itemIsWhitelisted or qset[rname] == true
+                itemIsBlacklisted = itemIsBlacklisted or qset[rname] == false
+            end
+        end
+        if not itemIsWhitelisted and itemIsBlacklisted then
+            return
+        end
         local entry = dest[itemIdWithSuffix]
         if entry then
             entry.stackCount = (entry.stackCount or 0) + item.stackCount
@@ -146,7 +182,12 @@ function addon:CapturePersonalBankSnapshot()
                         scannedSlots = scannedSlots + 1
                         local item = C_Container.GetContainerItemInfo(bag, slotNumber)
                         if item and item.hyperlink and item.stackCount then
-                            local before = dest[tostring(item.itemID)] ~= nil
+                            local suffixID = select(8, strsplit(':', item.hyperlink))
+                            local itemKey = tostring(item.itemID)
+                            if suffixID and suffixID ~= "" then
+                                itemKey = itemKey .. ":" .. suffixID
+                            end
+                            local before = dest[itemKey] ~= nil
                             recordItem(dest, item)
                             foundStacks = foundStacks + item.stackCount
                             if not before then uniqueItems = uniqueItems + 1 end
@@ -195,30 +236,92 @@ function addon:CapturePersonalBankSnapshot()
     end
 end
 
-function addon:CreatePersonalFrame()
+--- Sorted list of { name, money } and sum of all known snapshot wallets (top `limit`).
+function addon:GetPersonalGoldLeaderboard(limit)
     ensurePersonalDB()
+    limit = limit or 10
     local pb = self.db and self.db.factionrealm and self.db.factionrealm.personalBank
-    local charCount = 0
-    local totalUniqueItems = 0
-    if pb and pb.characters then
-        for _, c in pairs(pb.characters) do
-            charCount = charCount + 1
-            if c.items then
-                for _ in pairs(c.items) do totalUniqueItems = totalUniqueItems + 1 end
+    if not pb or type(pb.characters) ~= "table" then
+        return {}, 0
+    end
+    local rows = {}
+    local total = 0
+    for charName, charData in pairs(pb.characters) do
+        if type(charData) == "table" then
+            local m = charData.money
+            if type(m) == "number" then
+                total = total + m
+                rows[#rows + 1] = { name = tostring(charName), money = m }
             end
         end
     end
+    table.sort(rows, function(a, b)
+        if a.money ~= b.money then
+            return a.money > b.money
+        end
+        return tostring(a.name):lower() < tostring(b.name):lower()
+    end)
+    while #rows > limit do
+        table.remove(rows)
+    end
+    return rows, total
+end
+
+--- Texte pour la barre de statut de la fenêtre (onglet Personal).
+function addon:GetPersonalSnapshotStatusText()
+    ensurePersonalDB()
+    local pb = self.db and self.db.factionrealm and self.db.factionrealm.personalBank
+    local charCount = 0
+    if pb and pb.characters then
+        for _ in pairs(pb.characters) do
+            charCount = charCount + 1
+        end
+    end
+    if not pb or not pb.characters or not pb.lastCapture or pb.lastCapture == 0 then
+        return "No personal snapshot yet. Open your bank once on each character."
+    end
+    local lastChar = pb.lastCharacter or "?"
+    return "Snapshots: " .. tostring(charCount) .. " characters — latest: " .. lastChar .. " (" .. SecondsToTime(GetServerTime() - pb.lastCapture) .. " ago)"
+end
+
+function addon:CreatePersonalFrame()
+    ensurePersonalDB()
+    self:RefreshPersonalCharacterMoney()
+    local pb = self.db and self.db.factionrealm and self.db.factionrealm.personalBank
     local parentContainer = self.LIBS.aceGUI:Create('SimpleGroup')
     parentContainer:SetLayout("Flow")
+    -- Assure au TabGroup (Fill) que ce groupe prend toute la largeur utile (évite 300px par défaut du pool).
+    parentContainer:SetFullWidth(true)
 
-    local header = self.LIBS.aceGUI:Create('Label')
-    if not pb or not pb.characters or not pb.lastCapture or pb.lastCapture == 0 then
-        header:SetText("No personal snapshot yet. Open your bank once on each character.")
-    else
-        local lastChar = pb.lastCharacter or "?"
-        header:SetText("Snapshots: "..tostring(charCount).." characters — latest: "..lastChar.." ("..SecondsToTime(GetServerTime() - pb.lastCapture).." ago)")
+    do
+        local _, goldTotal = self:GetPersonalGoldLeaderboard(10)
+        local goldLabel = self.LIBS.aceGUI:Create("InteractiveLabel")
+        goldLabel:SetText(GetMoneyString(goldTotal))
+        goldLabel:SetFullWidth(true)
+        goldLabel:SetCallback("OnEnter", function(widget)
+            if not (GameTooltip and GameTooltip.SetOwner) then return end
+            GameTooltip:SetOwner(widget.frame, "ANCHOR_RIGHT")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine("|cffffffffPersonal gold|r")
+            GameTooltip:AddLine("|cffaaaaaaTop 10 characters (stored amounts)|r")
+            GameTooltip:AddLine(" ")
+            local board, total = self:GetPersonalGoldLeaderboard(10)
+            if #board == 0 then
+                GameTooltip:AddLine("|cffaaaaaaNo character gold stored yet.|r")
+            else
+                for i, row in ipairs(board) do
+                    GameTooltip:AddLine(string.format("%d. %s  %s", i, row.name, GetMoneyString(row.money)))
+                end
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Total: " .. GetMoneyString(total))
+            end
+            GameTooltip:Show()
+        end)
+        goldLabel:SetCallback("OnLeave", function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+        parentContainer:AddChild(goldLabel)
     end
-    parentContainer:AddChild(header)
 
     -- Quality filter (strict match).
     self.db.profile.qualityFilters = self.db.profile.qualityFilters or {}
@@ -320,7 +423,7 @@ function addon:CreatePersonalFrame()
         local agg = {}
         for charName, charData in pairs(pb.characters) do
             if charData then
-                local settings = charData.settings or { shareBank = true, shareBags = false }
+                local settings = charData.settings or { shareBank = false, shareBags = false }
                 local function addFromSource(items)
                     if not items then return end
                     for itemKey, item in pairs(items) do
@@ -415,6 +518,41 @@ function addon:CreatePersonalFrame()
 
     -- Hide tooltip when frame is released/closed.
     parentContainer.frame:HookScript("OnHide", hideTooltip)
+
+    -- Le Flow utilise `content.width` / GetWidth, souvent encore ~200–300 après recycle ou avant layout TabGroup.
+    -- On prend la largeur du parent (corps de l’onglet) ; repli proche de la fenêtre (600px − chrome).
+    local function personalPanelTabContentWidth()
+        local f = parentContainer.frame
+        if not f then return 0 end
+        local p = f:GetParent()
+        local w = (p and p:GetWidth()) or 0
+        if (not w or w <= 10) and f:GetWidth() and f:GetWidth() > 10 then
+            w = f:GetWidth()
+        end
+        if not w or w < 350 then
+            w = 528
+        end
+        return w
+    end
+
+    local function syncPersonalPanelLayout()
+        if not (parentContainer and parentContainer.content and parentContainer.DoLayout) then return end
+        local w = personalPanelTabContentWidth()
+        parentContainer.content.width = w
+        parentContainer:DoLayout()
+    end
+
+    parentContainer.frame:HookScript("OnShow", syncPersonalPanelLayout)
+    parentContainer.frame:HookScript("OnSizeChanged", syncPersonalPanelLayout)
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, syncPersonalPanelLayout)
+        C_Timer.After(0.05, syncPersonalPanelLayout)
+    else
+        parentContainer.frame:SetScript("OnUpdate", function(f)
+            f:SetScript("OnUpdate", nil)
+            syncPersonalPanelLayout()
+        end)
+    end
 
     buildTree("")
 

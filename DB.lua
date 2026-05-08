@@ -1,25 +1,29 @@
 local addon = BeanBank
 
 function addon:GetBank(bank)
-    if bank then
-        local bankElement = self.db.factionrealm.banks[bank]
-        if not bankElement.wishlist then
-            self.db.factionrealm.banks[bank].wishlist = {}
-        end
-        return self.db.factionrealm.banks[bank]
-    else
-        return nil
+    if not bank then return nil end
+    if not (self.db and self.db.factionrealm) then return nil end
+    self.db.factionrealm.banks = self.db.factionrealm.banks or {}
+
+    local bankElement = self.db.factionrealm.banks[bank]
+    if not bankElement then
+        bankElement = { players = {}, wishlist = {} }
+        self.db.factionrealm.banks[bank] = bankElement
     end
+    bankElement.players = bankElement.players or {}
+    bankElement.wishlist = bankElement.wishlist or {}
+    return bankElement
 end
 
 function addon:GetBankPlayer(bank, player)
-    local dbBank = self.db.factionrealm.banks[bank]
+    local dbBank = self:GetBank(bank)
+    if not dbBank or not dbBank.players then return nil end
     return dbBank.players[player]
 end
 
 function addon:GetBankPlayers(bank)
-    local dbBank = self.db.factionrealm.banks[bank]
-
+    local dbBank = self:GetBank(bank)
+    if not dbBank then return nil end
     return dbBank.players
 end
 

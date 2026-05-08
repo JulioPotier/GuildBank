@@ -1,14 +1,14 @@
 ## Interface: 11507
 ## Version: 0.1.0
-## Title: AdvCoBank
-## Notes: AdvCoBank helper addon
+## Title: Guild Bank
+## Notes: Guild bank helper addon
 ## Forked from Bean Bank
 ## Author: Kirby2112
-## SavedVariables: AdvCoBankDB
+## SavedVariables: GuildBankDB
 
 embeds.xml
 
 Core.lua
-BeanBank.lua
+GuildBank.lua
 PersonalBank.lua
 DB.lua

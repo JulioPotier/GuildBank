@@ -65,7 +65,7 @@ function addon:OnInitialize()
     self:RegisterCallbacks()
     self:RegisterEvents()
     self:RegisterOptions()
-    addon:RegisterChatCommand("bb", "RunMenu")
+    addon:RegisterChatCommand("gbank", "RunMenu")
     local bypassRank = 1000
     if UnitNameUnmodified("player") == 'Kuronie' then
         bypassRank = 2
@@ -156,7 +156,7 @@ function addon:RegisterDB()
         char = {
             personal = {
                 shareBags = false,
-                shareBank = true
+                shareBank = false
             },
             sync = {
                 lastAutoSync = 0
@@ -175,7 +175,7 @@ function addon:RegisterDB()
                 personalQuality = -1,
             },
             itemRarities = {
-                poor = true,
+                poor = false,
                 common = true,
                 uncommon = true,
                 rare = true,
@@ -253,6 +253,13 @@ function addon:RegisterEvents()
     self:RegisterEvent("BAG_UPDATE_DELAYED")
     self:RegisterEvent("CHAT_MSG_GUILD")
     self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    self:RegisterEvent("PLAYER_ENTERING_WORLD")
+end
+
+function addon:PLAYER_ENTERING_WORLD()
+    if self.RefreshPersonalCharacterMoney then
+        self:RefreshPersonalCharacterMoney()
+    end
 end
 
 --- Succès tardif après RequestLoadItemDataByID ou cache client (wishlist bloquée sur "loading").
@@ -372,12 +379,12 @@ function addon:RegisterOptions()
                     },
                     containerTitle = {
                         type = "header",
-                        name = "Character containers to include in the bank",
+                        name = "Guild sharing",
                         order = 7
                     },
                     includeBags = {
                         type = "toggle",
-                        name = "Bags",
+                        name = "Guild: Bags",
                         desc = "Catalogue all items in your character's bags",
                         confirm = function() return self:DisplayConfirmationForBags() end,
                         get = function(info) return self.db.char.banking and self.db.char.banking.bags end,
@@ -392,7 +399,7 @@ function addon:RegisterOptions()
                     },
                     includeBank = {
                         type = "toggle",
-                        name = "Bank",
+                        name = "Guild: Bank",
                         desc = "Catalogue all items in your character's bank",
                         confirm = function() return self:DisplayConfirmationForBank() end,
                         get = function(info) return self.db.char.banking and self.db.char.banking.bank end,
@@ -407,7 +414,7 @@ function addon:RegisterOptions()
                     },
                     includeMoney = {
                         type = "toggle",
-                        name = "Gold",
+                        name = "Guild: Gold",
                         desc = "Include gold",
                         confirm = function() return self:DisplayConfirmationForMoney() end,
                         get = function(info) return self.db.char.banking and self.db.char.banking.money end,
@@ -424,19 +431,8 @@ function addon:RegisterOptions()
                     },
                     personalTitle = {
                         type = "header",
-                        name = "Personal tab snapshot",
+                        name = "Personal sharing",
                         order = 11
-                    },
-                    personalShareBank = {
-                        type = "toggle",
-                        name = "Personal: Bank",
-                        desc = "Include THIS character's bank contents in the Personal tab (account-wide view).",
-                        get = function() return self.db.char.personal and self.db.char.personal.shareBank end,
-                        set = function(_, v)
-                            self.db.char.personal = self.db.char.personal or {}
-                            self.db.char.personal.shareBank = v
-                        end,
-                        order = 12
                     },
                     personalShareBags = {
                         type = "toggle",
@@ -446,6 +442,17 @@ function addon:RegisterOptions()
                         set = function(_, v)
                             self.db.char.personal = self.db.char.personal or {}
                             self.db.char.personal.shareBags = v
+                        end,
+                        order = 12
+                    },
+                    personalShareBank = {
+                        type = "toggle",
+                        name = "Personal: Bank",
+                        desc = "Include THIS character's bank contents in the Personal tab (account-wide view).",
+                        get = function() return self.db.char.personal and self.db.char.personal.shareBank end,
+                        set = function(_, v)
+                            self.db.char.personal = self.db.char.personal or {}
+                            self.db.char.personal.shareBank = v
                         end,
                         order = 13
                     }
@@ -925,6 +932,9 @@ end
 
 function addon:TryLoadGuild()
     self:UpgradeTo_0_8_13()
+    if GuildRoster then
+        pcall(GuildRoster)
+    end
     local localPlayerName, localPlayerRealm = UnitFullName("player")
     local fullName = localPlayerName..'-'..localPlayerRealm
     addon.bank = self:GetBank(self:GetBankName())
@@ -1064,6 +1074,13 @@ function addon:ProcessSyncResponses()
         return
     end
 
+    -- If nobody answered, keep using local snapshot; just end the sync attempt quietly.
+    if next(syncEvents) == nil then
+        addon.syncInProgress = false
+        addon.bank = bank
+        return
+    end
+
     addon.syncInProgress = true
     local bestSyncs = {}
     setmetatable(bestSyncs, {
@@ -1197,7 +1214,7 @@ end
 ]]--------------------------------------------------------------------------------------
 
 function addon:TestWhisper(...)
-    local bankName = "AdvCoBank Test"
+    local bankName = "GuildBank Test"
     local key = 4625
     self:SetBank(bankName)
     self:SetItem(bankName, playerGuid, 'bank', 'test', C_Container.GetContainerItemInfo(addon.CONSTANTS.containerSlots.bags[1], 1))
@@ -1347,6 +1364,9 @@ function addon:SyncWithPlayers(isAuto)
        addon.playerSyncAttempted = true
        return
     end
+    -- Always keep a usable local snapshot (SavedVariables) even if nobody is online to answer sync requests.
+    -- Remote sync only refreshes; local data remains valid for your other characters.
+    addon.bank = self:GetBank(bankName)
     if self.db and self.db.char then
         self.db.char.sync = self.db.char.sync or {}
         self.db.char.sync.lastAutoSync = GetServerTime()
@@ -1514,6 +1534,39 @@ function addon:GetAllContent()
     return itemsCharactersList, money
 end
 
+--- Sorted list of { name, money } for synced guild bank players (top `limit`).
+function addon:GetBankGoldLeaderboard(bankName, limit)
+    limit = limit or 10
+    local bank = bankName and self:GetBank(bankName)
+    if not bank or type(bank.players) ~= "table" then
+        return {}
+    end
+    local rows = {}
+    for playerId, entry in pairs(bank.players) do
+        if type(entry) == "table" then
+            local m = entry.money
+            if type(m) ~= "number" then
+                m = 0
+            end
+            local nm = entry.name
+            if type(nm) ~= "string" or nm == "" then
+                nm = tostring(playerId)
+            end
+            rows[#rows + 1] = { name = nm, money = m }
+        end
+    end
+    table.sort(rows, function(a, b)
+        if a.money ~= b.money then
+            return a.money > b.money
+        end
+        return tostring(a.name):lower() < tostring(b.name):lower()
+    end)
+    while #rows > limit do
+        table.remove(rows)
+    end
+    return rows
+end
+
 --[[------------------------------------------------------------------------------------
     SLASH COMMANDS
 ]]--------------------------------------------------------------------------------------
@@ -1568,7 +1621,11 @@ function addon:ShowUI()
         if group == 'versions' then
             parentFrame:SetStatusText('Your version: '..addon.version)
         elseif group == 'personal' then
-            parentFrame:SetStatusText('Personal snapshot')
+            if self.GetPersonalSnapshotStatusText then
+                parentFrame:SetStatusText(self:GetPersonalSnapshotStatusText())
+            else
+                parentFrame:SetStatusText("Personal")
+            end
         else
             local epoch = self:GetMostRecentSync(bankName)
             local hours, minutes = 0, 0
@@ -1610,15 +1667,15 @@ function addon:ShowUI()
             self:RefreshWishlistTabBadge()
             container:AddChild(self:CreateWishlistFrame())
         elseif group == 'versions' then
-            ACD:Open('BeanBank_Versions', container)
+            ACD:Open('GuildBank_Versions', container)
         end
     end
     addon.wishlistInputBuffer = addon.wishlistInputBuffer or ""
-    LibStub('AceConfig-3.0'):RegisterOptionsTable('BeanBank_Versions', addon.versions)
+    LibStub('AceConfig-3.0'):RegisterOptionsTable('GuildBank_Versions', addon.versions)
 
     parent:SetLayout("Fill")
     parent:SetWidth(600)
-    parent:SetTitle("AdvCoBank")
+    parent:SetTitle("Guild Bank")
     parent:SetCallback("OnClose", function(widget)
         addon._advCoBankTabWidget = nil
         AceGUI:Release(widget)
@@ -1900,7 +1957,7 @@ function addon:RefreshWishlistAceRowList(rowsContainer)
             elseif baseId and GameTooltip.SetItemByID then
                 GameTooltip:SetItemByID(baseId)
             end
-            GameTooltip:AddLine("|cFFA15C0EAdvCoBank|r")
+            GameTooltip:AddLine("|cFFA15C0EGuild Bank|r")
             GameTooltip:AddLine("|cffd4c4a0Personal wishlist|r")
             GameTooltip:Show()
         end)
@@ -2077,7 +2134,7 @@ function addon:ShowWishlistInfoTooltip()
         if baseId then wishlistItem = wlRoot[tostring(baseId)] end
     end
     if not wishlistItem or type(wishlistItem) ~= "table" then return end
-    GameTooltip:AddLine("|cFFA15C0EAdvCoBank|r")
+    GameTooltip:AddLine("|cFFA15C0EGuild Bank|r")
     GameTooltip:AddLine("|cffd4c4a0Personal wishlist|r")
     GameTooltip:AddLine()
 end
@@ -2224,11 +2281,36 @@ function addon:CreateTreeview(bankName)
     local itemsCharactersList, money = self:GetAllContent()
     local parentContainer = AceGUI:Create('SimpleGroup')
     parentContainer:SetLayout("Flow")
-    local label = AceGUI:Create('Label')
+    local label = AceGUI:Create("InteractiveLabel")
     if not money then
         money = 0
     end
     label:SetText(GetMoneyString(money))
+    label:SetFullWidth(true)
+    label:SetCallback("OnEnter", function(widget)
+        if not (GameTooltip and GameTooltip.SetOwner) then return end
+        GameTooltip:SetOwner(widget.frame, "ANCHOR_RIGHT")
+        GameTooltip:ClearLines()
+        GameTooltip:AddLine("|cffffffffGuild gold (synced)|r")
+        GameTooltip:AddLine("|cffaaaaaaTop 10 members by amount|r")
+        GameTooltip:AddLine(" ")
+        local board = self:GetBankGoldLeaderboard(bankName, 10)
+        if #board == 0 then
+            GameTooltip:AddLine("|cffaaaaaaNo member data in bank snapshot.|r")
+        else
+            for i, row in ipairs(board) do
+                GameTooltip:AddLine(
+                    string.format("%d. %s  %s", i, row.name, GetMoneyString(row.money))
+                )
+            end
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Total: " .. GetMoneyString(money))
+        end
+        GameTooltip:Show()
+    end)
+    label:SetCallback("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
     parentContainer:AddChild(label)
 
     -- Quality filter (strict match).
@@ -2458,11 +2540,19 @@ end
 --- Generates a guild name for a banking key. If the player is unguilded, the player's name is returned.
 function addon:GetBankName()
     if superdev then
-        return 'AdvCoBank Test'
+        return 'GuildBank Test'
     else
+        -- In Classic, guild info can be nil briefly after login / on some characters until roster info is requested.
+        -- Cache the last known guild name in SavedVariables so alts always use the same local bank key.
         local guildName = GetGuildInfo("player")
         if guildName then
+            if self.db and self.db.factionrealm then
+                self.db.factionrealm.lastGuildName = guildName
+            end
             return guildName
+        end
+        if self.db and self.db.factionrealm and type(self.db.factionrealm.lastGuildName) == "string" and self.db.factionrealm.lastGuildName ~= "" then
+            return self.db.factionrealm.lastGuildName
         end
         local playerName = GetUnitName and GetUnitName("player", false) or UnitName("player")
         return playerName
@@ -2471,7 +2561,7 @@ end
 
 --- Registers a given frame to the global frames. This allows the frame to be closed when using the ESC key.
 function addon:RegisterSpecialFrame(frame)
-    local name = "BeanBankFrame"..openedFrames
+    local name = "GuildBankFrame"..openedFrames
     openedFrames = openedFrames + 1
     _G[name] = frame.frame
     tinsert(UISpecialFrames, name)

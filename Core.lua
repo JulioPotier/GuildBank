@@ -1,7 +1,7 @@
 local addonName = ...
 local GetAddOnMetadata = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
-BeanBank = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceConsole-3.0", "AceEvent-3.0", "AceComm-3.0", "AceSerializer-3.0", "AceTimer-3.0")
-local addon = BeanBank
+GuildBank = LibStub("AceAddon-3.0"):NewAddon(addonName, "AceConsole-3.0", "AceEvent-3.0", "AceComm-3.0", "AceSerializer-3.0", "AceTimer-3.0")
+local addon = GuildBank
 addon.version = GetAddOnMetadata(addonName, "Version")
 addon.playerGuid = UnitGUID("player") or ''
 
