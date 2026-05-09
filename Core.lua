@@ -67,8 +67,4 @@ addon.versions = {
     }
 
 
-function addon:Debug(message)
-    if addon.debug then
-        self:Print("[DEBUG] "..message)
-    end
-end
+-- `addon:Debug()` is implemented in GuildBank.lua (loads after Core) and also feeds the Debug tab console.
