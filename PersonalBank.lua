@@ -381,6 +381,7 @@ function addon:CreatePersonalFrame()
     tree:EnableButtonTooltips(true)
     tree:SetFullWidth(true)
     parentContainer:AddChild(tree)
+    self:AttachTestIconToTreeRightPane(tree)
 
     local function hideTooltip()
         if GameTooltip and GameTooltip:IsShown() then

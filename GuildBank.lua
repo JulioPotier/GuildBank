@@ -39,10 +39,10 @@ By AQ:
 ]]--------------------------------------------------------------------------------------
 --inv_scarab_clay
 
-local superdev = UnitNameUnmodified('player') == 'Kuronie'
+local superdev = UnitNameUnmodified('player') == 'Mmuullee'
 local addonName = ...
 -- Global created in Core.lua as `GuildBank`; `BeanBank` kept for older setups.
-local addon = GuildBank or BeanBank
+local addon = GuildBank
 assert(addon, "GuildBank addon table not initialized")
 local version = addon.version
 local aceCommPrefixes = addon.COMM.prefixes
@@ -2465,6 +2465,18 @@ function addon:CreateDebugConsoleFrame()
     return textFrame
 end
 
+--- Bouton de test purement visuel dans le panneau droit du TreeGroup (onglets Banking / Personal).
+function addon:AttachTestIconToTreeRightPane(treeWidget)
+    if not (treeWidget and treeWidget.border) then return end
+    local border = treeWidget.border
+    local btn = CreateFrame("Button", nil, border)
+    btn:SetSize(32, 32)
+    btn:SetPoint("TOPRIGHT", border, "TOPRIGHT", -5, -5)
+    btn:SetFrameLevel(border:GetFrameLevel() + 5)
+    btn:EnableMouse(false)
+    btn:SetNormalTexture("Interface\\Icons\\inv_enchant_shardnexuslarge")
+end
+
 --- Creates the main bank UI treeview frames.
 function addon:CreateTreeview(bankName)
     local itemsCharactersList, money = self:GetAllContent()
@@ -2662,6 +2674,7 @@ function addon:CreateTreeview(bankName)
     table:SetFullWidth(true)
     self:EnsureBankExists(bankName)
     parentContainer:AddChild(table)
+    self:AttachTestIconToTreeRightPane(table)
 
     parentContainer.frame:HookScript("OnHide", hideTooltip)
 
