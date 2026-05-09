@@ -1,6 +1,4 @@
--- Global created in Core.lua as `GuildBank`; `BeanBank` kept for older setups.
-local addon = GuildBank or BeanBank
-assert(addon, "GuildBank addon table not initialized")
+local addon = BeanBank
 local rarities = addon.CONSTANTS and addon.CONSTANTS.rarities or { "poor", "common", "uncommon", "rare", "epic", "legendary" }
 
 local function ensurePersonalDB()
@@ -235,18 +233,6 @@ function addon:CapturePersonalBankSnapshot()
                 end
             end
         end
-    end
-
-    if addon.DebugConsoleLog then
-        addon:DebugConsoleLog(string.format(
-            "Personal snapshot: character=%s bank=%s bags=%s slotsScanned=%d stackItems=%d distinct=%d",
-            tostring(char),
-            tostring(shareBank),
-            tostring(shareBags),
-            scannedSlots,
-            foundStacks,
-            uniqueItems
-        ))
     end
 end
 

@@ -41,9 +41,7 @@ By AQ:
 
 local superdev = UnitNameUnmodified('player') == 'Kuronie'
 local addonName = ...
--- Global created in Core.lua as `GuildBank`; `BeanBank` kept for older setups.
-local addon = GuildBank or BeanBank
-assert(addon, "GuildBank addon table not initialized")
+local addon = BeanBank
 local version = addon.version
 local aceCommPrefixes = addon.COMM.prefixes
 local aceCommMessages = addon.COMM.messages
@@ -54,39 +52,6 @@ local ACD = addon.LIBS.aceCD
 local AceGUI = addon.LIBS.aceGUI
 local openedFrames = addon.openFrames
 
-local DEBUG_CONSOLE_MAX_LINES = 800
-
-function addon:_DebugConsoleAppend(line)
-    if not addon.debug then return end
-    addon._debugConsoleLines = addon._debugConsoleLines or {}
-    local stamp = date and date("%H:%M:%S") or "--:--:--"
-    tinsert(addon._debugConsoleLines, stamp .. "  " .. tostring(line))
-    while #addon._debugConsoleLines > DEBUG_CONSOLE_MAX_LINES do
-        tremove(addon._debugConsoleLines, 1)
-    end
-    local ed = addon._debugConsoleEditBoxAce
-    if ed and ed.SetText then
-        ed:SetText(self:_DebugConsoleGetText())
-    end
-end
-
-function addon:_DebugConsoleGetText()
-    return table.concat(addon._debugConsoleLines or {}, "\n")
-end
-
---- High-level events for the Debug tab (not necessarily [DEBUG] chat prints).
-function addon:DebugConsoleLog(message)
-    if not addon.debug then return end
-    self:_DebugConsoleAppend(tostring(message))
-end
-
-function addon:Debug(message)
-    local m = tostring(message)
-    if addon.debug then
-        self:Print("[DEBUG] " .. m)
-        self:_DebugConsoleAppend("[DEBUG] " .. m)
-    end
-end
 
 --- Called by Ace3 when addon is loaded.
 function addon:OnInitialize()
@@ -117,9 +82,6 @@ function addon:OnInitialize()
     addon.tooltip = self.db.profile.tooltip
     addon.guildRank = bypassRank
     addon.loaded = false
-    if addon.debug then
-        self:DebugConsoleLog("OnInitialize: DB, upgrades, comms, callbacks, events, options, /gbank registered.")
-    end
 end
 
 --- Called by Ace3 when addon is enabled.
@@ -364,25 +326,10 @@ function addon:RegisterOptions()
                             self.db.profile.debugOptions.enableSync = val
                         end
                     },
-                    debug = {
-                        type = "toggle",
-                        name = "Debug mode",
-                        desc = "Enable debug messages and the Debug / Export tabs.",
-                        order = 3,
-                        width = "full",
-                        get = function() return addon.debug end,
-                        set = function(_, val)
-                            addon.debug = val
-                            self.db.profile.debug = val
-                            if val then
-                                self:DebugConsoleLog("Debug mode enabled (Interface options).")
-                            end
-                        end
-                    },
                     tooltipTitle = {
                         type = "header",
                         name = "Tooltip",
-                        order = 4,
+                        order = 3,
                     },
                     showTooltip = {
                         type = 'toggle',
@@ -393,7 +340,7 @@ function addon:RegisterOptions()
                         set = function(info, value)
                             self.db.profile.tooltip.show = value
                         end,
-                        order = 5
+                        order = 4
                     },
                     showItemBorder = {
                         type = 'toggle',
@@ -404,7 +351,7 @@ function addon:RegisterOptions()
                         set = function(info, value)
                             self.db.profile.tooltip.showBorder = value
                         end,
-                        order = 6
+                        order = 5
                     },
                     tooltipColour = {
                         type = 'color',
@@ -428,12 +375,12 @@ function addon:RegisterOptions()
                                 a = a
                             }
                         end,
-                        order = 7
+                        order = 6
                     },
                     containerTitle = {
                         type = "header",
                         name = "Guild sharing",
-                        order = 8
+                        order = 7
                     },
                     includeBags = {
                         type = "toggle",
@@ -448,7 +395,7 @@ function addon:RegisterOptions()
                                 self:RemoveItemsFromBags()
                             end
                         end,
-                        order = 9
+                        order = 8
                     },
                     includeBank = {
                         type = "toggle",
@@ -463,7 +410,7 @@ function addon:RegisterOptions()
                                 self:RemoveItemsFromBank()
                             end
                         end,
-                        order = 10
+                        order = 9
                     },
                     includeMoney = {
                         type = "toggle",
@@ -480,12 +427,12 @@ function addon:RegisterOptions()
                                 self:RemoveMoneyFromBank()
                             end
                         end,
-                        order = 11
+                        order = 10
                     },
                     personalTitle = {
                         type = "header",
                         name = "Personal sharing",
-                        order = 12
+                        order = 11
                     },
                     personalShareBags = {
                         type = "toggle",
@@ -496,7 +443,7 @@ function addon:RegisterOptions()
                             self.db.char.personal = self.db.char.personal or {}
                             self.db.char.personal.shareBags = v
                         end,
-                        order = 13
+                        order = 12
                     },
                     personalShareBank = {
                         type = "toggle",
@@ -507,7 +454,7 @@ function addon:RegisterOptions()
                             self.db.char.personal = self.db.char.personal or {}
                             self.db.char.personal.shareBank = v
                         end,
-                        order = 14
+                        order = 13
                     }
                 }
             },
@@ -699,12 +646,30 @@ function addon:RegisterOptions()
                     }
                 },
             },
+            debugOptions = {
+                name = "Debug",
+                type = "group",
+                args = {
+                    debug = {
+                        type = "toggle",
+                        name = "Debug mode",
+                        desc = "Enable debug messages",
+                        order = 1,
+                        get = function(info) return addon.debug end,
+                        set = function(info, val) 
+                            addon.debug = val
+                            self.db.profile.debug = val 
+                        end
+                    }
+                }
+            }
         }
     }
 
     LibStub('AceConfig-3.0'):RegisterOptionsTable(addonName, options)
     ACD:AddToBlizOptions(addonName, addonName, nil, 'general')
     ACD:AddToBlizOptions(addonName, 'Items', addonName, 'items')
+    ACD:AddToBlizOptions(addonName, 'Debug', addonName, 'debugOptions')
     icon:Register(addonName, addon.LIBS.libDB, self.db.profile.minimap)
 end
 
@@ -802,11 +767,6 @@ function addon:OnSyncDataReceived(prefix, message, distribution, sender)
     for bankPlayerName, data in pairs(response.data) do
         self:SetPlayerData(bankName, bankPlayerName, data)
     end
-    local rowCount = 0
-    for _ in pairs(response.data or {}) do
-        rowCount = rowCount + 1
-    end
-    self:DebugConsoleLog("OnSyncDataReceived: merged " .. tostring(rowCount) .. " player row(s) from '" .. tostring(sender) .. "'.")
     addon.syncInProgress = false
     self:Print("END streaming data. Bank data received from "..sender)
     self:RefreshWishlistTabBadge()
@@ -840,7 +800,6 @@ function addon:OnSyncAcceptedReceived(prefix, message, distribution, sender)
         data = playerData
     })
     self:SendCommMessage(aceCommPrefixes.sync, serializedData, "WHISPER", sender)
-    self:DebugConsoleLog("OnSyncAcceptedReceived: sent full banking payload to '" .. tostring(sender) .. "' (WHISPER).")
 end
 
 local guildSyncEvents = {}
@@ -942,7 +901,6 @@ end
 
 function addon:BANKFRAME_OPENED()
     if not addon.loaded then return end
-    self:DebugConsoleLog("BANKFRAME_OPENED: updating guild bank catalogue (bags/bank/gold).")
     self:UpdateAllContainers()
 end
 
@@ -982,7 +940,6 @@ function addon:TryLoadGuild()
     addon.bank = self:GetBank(self:GetBankName())
     self:MigrateGuildWishlistToPersonalIfNeeded()
     self:Print(ChatFrame1, version.." loaded")
-    self:DebugConsoleLog("TryLoadGuild: player " .. tostring(fullName) .. ", bank key '" .. tostring(self:GetBankName()) .. "', addon loaded.")
     addon.loaded = true
     if addon.debugOptions.enableSync and not superdev then
         local now = GetServerTime()
@@ -1121,15 +1078,8 @@ function addon:ProcessSyncResponses()
     if next(syncEvents) == nil then
         addon.syncInProgress = false
         addon.bank = bank
-        self:DebugConsoleLog("ProcessSyncResponses: no guild replies; using local snapshot only.")
         return
     end
-
-    local respCount = 0
-    for _ in pairs(syncEvents) do
-        respCount = respCount + 1
-    end
-    self:DebugConsoleLog("ProcessSyncResponses: " .. tostring(respCount) .. " member(s) returned timestamps; choosing best sources…")
 
     addon.syncInProgress = true
     local bestSyncs = {}
@@ -1349,7 +1299,6 @@ function addon:UpdateAllContainers()
     self:UpdateBags()
     self:UpdateBank()
     self:UpdateGold()
-    self:DebugConsoleLog("UpdateAllContainers: local guild snapshot refreshed (bags, bank, gold).")
 end
 
 --- Whispers the specified playerName the quantity of the items they linked in a whisper prefixed with '$'
@@ -1413,10 +1362,8 @@ function addon:SyncWithPlayers(isAuto)
     local bankName = self:GetBankName()
     if not bankName then
        addon.playerSyncAttempted = true
-       self:DebugConsoleLog("SyncWithPlayers: aborted (no bank / guild key).")
        return
     end
-    self:DebugConsoleLog("SyncWithPlayers: start (auto=" .. tostring(isAuto == true) .. ", bankKey='" .. tostring(bankName) .. "').")
     -- Always keep a usable local snapshot (SavedVariables) even if nobody is online to answer sync requests.
     -- Remote sync only refreshes; local data remains valid for your other characters.
     addon.bank = self:GetBank(bankName)
@@ -1426,7 +1373,6 @@ function addon:SyncWithPlayers(isAuto)
     end
     local seri = self:Serialize({ version = version, data = bankName })
     self:SendCommMessage(aceCommPrefixes.syncRequest, seri, "GUILD")
-    self:DebugConsoleLog("SyncWithPlayers: sent GUILD syncRequest; parse in ~10s.")
     -- The OnSyncResponseReceived will listen to sync responses to determine which player with the most recent
     -- sync will share their data
     self:ScheduleTimer(function()
@@ -1635,7 +1581,6 @@ function addon:RunMenu(input)
         self:Print(ChatFrame1, "resetperso: resets Personal data for current character.")
         self:Print(ChatFrame1, "reset <CharacterName>: resets Personal data for specified character.")
         self:Print(ChatFrame1, "enable: manually reenables the addon.")
-        self:Print(ChatFrame1, "sync: requests a guild bank sync with other members.")
     elseif input == "show" then self:ShowUI()
     elseif input == "resetdb" then self:ResetDB()
     elseif input == "resetperso" then
@@ -1669,18 +1614,6 @@ function addon:ShowUI()
     if not addon.loaded then
         self:TryLoadGuild()
     end
-    local existingMain = addon._guildBankMainFrame
-    if existingMain and existingMain.frame then
-        local ok, visible = pcall(function()
-            return existingMain.frame:IsShown()
-        end)
-        if ok and visible then
-            pcall(function() existingMain.frame:Raise() end)
-            existingMain:Show()
-            return
-        end
-    end
-
     local parent = AceGUI:Create("Frame")
     local function onTabChanged(container, event, group, parentFrame)
         container:ReleaseChildren()
@@ -1693,28 +1626,25 @@ function addon:ShowUI()
             else
                 parentFrame:SetStatusText("Personal")
             end
-        elseif group == "debug" then
-            parentFrame:SetStatusText("Runtime activity log")
         else
             local epoch = self:GetMostRecentSync(bankName)
-            local hasValidEpoch = epoch and epoch > 0 and epoch ~= -1
-            if addon.syncInProgress then
-                parentFrame:SetStatusText("SYNC IN PROGRESS...")
-            elseif not hasValidEpoch then
-                -- nil / 0 / invalid: do not use 0 as Unix time (would show ~50 years "ago").
-                parentFrame:SetStatusText("No sync yet")
+            local hours, minutes = 0, 0
+            if (not epoch or epoch == -1) then
+                parentFrame:SetStatusText("Never")
             else
                 local delta = GetServerTime() - epoch
-                local hours = floor(delta / 3600)
-                local minutes = floor(delta / 60)
-                if hours < 1 then
-                    local plural = ''
-                    if minutes > 1 then plural = 's' end
-                    parentFrame:SetStatusText("Last synced ".. minutes.. " minute"..plural.." ago")
-                else
-                    minutes = minutes - 60 * hours
-                    parentFrame:SetStatusText("Last synced "..hours.."h"..minutes.."m ago")
-                end
+                hours = floor(delta / 3600)
+                minutes = floor(delta / 60)
+            end
+            if addon.syncInProgress then
+                parentFrame:SetStatusText("SYNC IN PROGRESS...")
+            elseif (hours < 1) then
+                local plural = ''
+                if minutes > 1 then plural = 's' end
+                parentFrame:SetStatusText("Last synced ".. minutes.. " minute"..plural.." ago")
+            else
+                minutes = minutes - 60 * hours
+                parentFrame:SetStatusText("Last synced "..hours.."h"..minutes.."m ago")
             end
         end
         if group == "banking" then
@@ -1736,8 +1666,6 @@ function addon:ShowUI()
         elseif group == 'wishlist' then
             self:RefreshWishlistTabBadge()
             container:AddChild(self:CreateWishlistFrame())
-        elseif group == "debug" then
-            container:AddChild(self:CreateDebugConsoleFrame())
         elseif group == 'versions' then
             ACD:Open('GuildBank_Versions', container)
         end
@@ -1750,8 +1678,6 @@ function addon:ShowUI()
     parent:SetTitle("Guild Bank")
     parent:SetCallback("OnClose", function(widget)
         addon._advCoBankTabWidget = nil
-        addon._guildBankMainFrame = nil
-        addon._debugConsoleEditBoxAce = nil
         AceGUI:Release(widget)
     end)
     local frame = AceGUI:Create("TabGroup")
@@ -1759,34 +1685,25 @@ function addon:ShowUI()
     frame:SetCallback("OnGroupSelected", function(widget, name, group) onTabChanged(widget, name, group, parent) end)
     local bypass = UnitNameUnmodified("player") == "Kuronie" and addon.debug
     if bypass or addon.guildRank <= 2 then
-        local tabs = {
-            { text = "Banking", value = "banking" },
-            { text = "Personal", value = "personal" },
-            { text = "Wishlist", value = "wishlist" },
-            { text = "Versions", value = "versions" },
-        }
-        if addon.debug then
-            table.insert(tabs, 3, { text = "Export", value = "export" })
-            table.insert(tabs, 4, { text = "Debug", value = "debug" })
-        end
-        frame:SetTabs(tabs)
+        frame:SetTabs({
+            { text = "Banking", value="banking" },
+            { text = "Personal", value="personal" },
+            { text = "Export", value="export" },
+            { text = "Wishlist", value='wishlist' },
+            { text = "Versions", value='versions'}
+        })
     else
-        local tabsLow = {
-            { text = "Banking", value = "banking" },
-            { text = "Personal", value = "personal" },
-            { text = "Wishlist", value = "wishlist" },
-            { text = "Versions", value = "versions" }
-        }
-        if addon.debug then
-            table.insert(tabsLow, 4, { text = "Debug", value = "debug" })
-        end
-        frame:SetTabs(tabsLow)
+        frame:SetTabs({
+            { text = "Banking", value="banking" },
+            { text = "Personal", value="personal" },
+            { text = "Wishlist", value="wishlist" },
+            { text = "Versions", value='versions'}
+        })
     end
     frame:SelectTab("banking")
     addon._advCoBankTabWidget = frame
     self:RegisterSpecialFrame(parent)
     parent:AddChild(frame)
-    addon._guildBankMainFrame = parent
     self:RefreshWishlistTabBadge()
 
     do return end
@@ -1998,10 +1915,6 @@ function addon:RefreshWishlistAceRowList(rowsContainer)
     local root = self:GetPersonalWishlistRoot()
     if not root then return end
 
-    local bankName = addon.loaded and self:GetBankName() or nil
-    local bank = (bankName and self:GetBank(bankName)) or nil
-    local bankPlayers = (bank and bank.players) or nil
-
     local list = {}
     for k, entry in pairs(root) do
         if type(entry) == "table" and entry.item then
@@ -2025,48 +1938,11 @@ function addon:RefreshWishlistAceRowList(rowsContainer)
         row:SetLayout("Flow")
         row:SetFullWidth(true)
 
-        local foundInGuildBank = false
-        if bankPlayers and ks then
-            for guid, pdata in pairs(bankPlayers) do
-                if guid ~= playerGuid and pdata and self:_playerDataContainsWishlistItem(pdata, ks) then
-                    foundInGuildBank = true
-                    break
-                end
-            end
-        end
-
         local il = AceGUI:Create("InteractiveLabel")
         il:SetWidth(448)
         if tex then il:SetImage(tex) end
         il:SetImageSize(36, 36)
         il:SetText(disp)
-
-        -- Highlight wishlist items that are present in synced guild bank data.
-        do
-            local f = il.frame
-            if f and f.CreateTexture then
-                if foundInGuildBank then
-                    if not f._gbWishlistFoundBorder then
-                        local border = f:CreateTexture(nil, "OVERLAY")
-                        border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-                        border:SetBlendMode("ADD")
-                        -- Anchor the glow on the icon, not the whole label row.
-                        -- AceGUI Label uses `self.image` texture for the icon.
-                        border:SetSize(62, 62)
-                        border:SetPoint("CENTER", il.image or f, "CENTER", 0, 0)
-                        f._gbWishlistFoundBorder = border
-                    end
-                    local border = f._gbWishlistFoundBorder
-                    -- Yellow fallback; slightly "loot-like" glow.
-                    border:SetVertexColor(1, 0.82, 0, 1)
-                    border:Show()
-                else
-                    if f._gbWishlistFoundBorder then
-                        f._gbWishlistFoundBorder:Hide()
-                    end
-                end
-            end
-        end
 
         local baseId = self:GetItemNumericId(ks)
         il:SetCallback("OnEnter", function(w)
@@ -2081,17 +1957,12 @@ function addon:RefreshWishlistAceRowList(rowsContainer)
             elseif baseId and GameTooltip.SetItemByID then
                 GameTooltip:SetItemByID(baseId)
             end
-            -- "Personal wishlist" is appended by GameTooltip OnTooltipSetItem (ShowWishlistInfoTooltip).
+            GameTooltip:AddLine("|cFFA15C0EGuild Bank|r")
+            GameTooltip:AddLine("|cffd4c4a0Personal wishlist|r")
             GameTooltip:Show()
         end)
         il:SetCallback("OnLeave", function()
             if GameTooltip then GameTooltip:Hide() end
-        end)
-
-        il:SetCallback("OnClick", function()
-            if not foundInGuildBank then return end
-            local itemName = tuple and tuple[1] or nil
-            self:FocusBankingOnWishlistItem(ks, itemName)
         end)
 
         local rm = AceGUI:Create("Button")
@@ -2236,22 +2107,6 @@ function addon:RefreshWishlistTabBadge()
     local wg = addon._advCoBankTabWidget
     if not (wg and wg.tablist and wg.BuildTabs) then return end
     local count = self:CountPersonalWishlistMatchesInOtherPlayersData()
-    -- Notify the user when wishlist items become available in synced guild bank data.
-    -- Avoid spamming: only print when the count increases (or flips from 0->>0), and throttle bursts.
-    do
-        local last = addon._wishlistLastAvailableCount
-        if type(last) ~= "number" then last = 0 end
-        addon._wishlistLastAvailableCount = count
-        if count and count > 0 and count > last then
-            local now = GetServerTime and GetServerTime() or time()
-            local lastAt = addon._wishlistLastAvailablePrintAt
-            if type(lastAt) ~= "number" then lastAt = 0 end
-            if (now - lastAt) >= 5 then
-                addon._wishlistLastAvailablePrintAt = now
-                self:Print(string.format("Wishlist: %d item%s available in the guild bank.", count, (count == 1 and "" or "s")))
-            end
-        end
-    end
     for _, tab in ipairs(wg.tablist) do
         if tab.value == "wishlist" then
             tab.text = count > 0 and ("Wishlist (" .. count .. ")") or "Wishlist"
@@ -2259,40 +2114,6 @@ function addon:RefreshWishlistTabBadge()
         end
     end
     wg:BuildTabs()
-end
-
---- Switches to Banking tab and focuses the item: fill search and expand the "+" player list for that item.
-function addon:FocusBankingOnWishlistItem(itemKeyStr, itemName)
-    local wg = addon._advCoBankTabWidget
-    if not (wg and wg.SelectTab) then return end
-    if type(itemName) ~= "string" or itemName == "" then
-        itemName = tostring(itemKeyStr or "")
-    end
-
-    -- Switch tab first (this rebuilds the Banking UI and refreshes stored widget refs).
-    wg:SelectTab("banking")
-
-    local function applyFocus()
-        local sb = addon._bankingSearchBarAce
-        local tree = addon._bankingTreeAce
-        local rebuild = addon._bankingRebuildTree
-        if sb and sb.SetText then
-            sb:SetText(itemName)
-        end
-        if type(rebuild) == "function" then
-            rebuild(itemName)
-        end
-        if tree and tree.SelectByValue then
-            tree:SelectByValue(tostring(itemKeyStr))
-        end
-    end
-
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, applyFocus)
-        C_Timer.After(0.05, applyFocus)
-    else
-        applyFocus()
-    end
 end
 
 function addon:IsAddonEnabled(otherAddon)
@@ -2313,7 +2134,9 @@ function addon:ShowWishlistInfoTooltip()
         if baseId then wishlistItem = wlRoot[tostring(baseId)] end
     end
     if not wishlistItem or type(wishlistItem) ~= "table" then return end
+    GameTooltip:AddLine("|cFFA15C0EGuild Bank|r")
     GameTooltip:AddLine("|cffd4c4a0Personal wishlist|r")
+    GameTooltip:AddLine()
 end
 
 function addon:HighlightBagItems()
@@ -2453,18 +2276,6 @@ function addon:CreateExportFrame()
     return textFrame
 end
 
---- Debug tab: scrollable log of addon activity (requires debug mode).
-function addon:CreateDebugConsoleFrame()
-    local textFrame = AceGUI:Create("MultiLineEditBox")
-    textFrame:SetLabel("Activity log (newest at bottom)")
-    textFrame:SetNumLines(22)
-    textFrame:SetFullWidth(true)
-    textFrame:DisableButton(true)
-    textFrame:SetText(self:_DebugConsoleGetText())
-    addon._debugConsoleEditBoxAce = textFrame
-    return textFrame
-end
-
 --- Creates the main bank UI treeview frames.
 function addon:CreateTreeview(bankName)
     local itemsCharactersList, money = self:GetAllContent()
@@ -2539,9 +2350,6 @@ function addon:CreateTreeview(bankName)
     filterRow:AddChild(searchBar)
     parentContainer:AddChild(filterRow)
     local table = AceGUI:Create("TreeGroup")
-    -- Store refs so other tabs (Wishlist) can drive the Banking search/expand UX.
-    addon._bankingSearchBarAce = searchBar
-    addon._bankingTreeAce = table
 
     local function hideTooltip()
         if GameTooltip and GameTooltip:IsShown() then
@@ -2639,7 +2447,6 @@ function addon:CreateTreeview(bankName)
             self:Debug("Banking quality filter="..tostring(filterQ).." items="..tostring(#sorted))
         end
     end
-    addon._bankingRebuildTree = rebuildTree
 
     searchBar:SetCallback('OnTextChanged', function(_, _, text)
         rebuildTree(text)

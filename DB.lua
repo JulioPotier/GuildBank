@@ -1,7 +1,4 @@
--- The addon global is created in `Core.lua` as `GuildBank`.
--- Older versions used `BeanBank`; keep a small compatibility fallback.
-local addon = GuildBank or BeanBank
-assert(addon, "GuildBank addon table not initialized")
+local addon = BeanBank
 
 function addon:GetBank(bank)
     if not bank then return nil end
@@ -115,17 +112,11 @@ function addon:GetMostRecentSync(bankName)
         tinsert(lastSyncs, bankInfo.lastSync or 0)
     end
 
-    -- No player data or no real sync timestamp: 0 was mistaken for "Unix epoch" in the UI (huge "hours ago").
     if #lastSyncs == 0 then
-        return nil
+        return 0
     end
 
-    local newest = max(unpack(lastSyncs))
-    if not newest or newest <= 0 then
-        return nil
-    end
-
-    return newest
+    return max(unpack(lastSyncs))
 end
 
 --- Personal wishlist (shared across characters on faction+realm via SavedVariables).
