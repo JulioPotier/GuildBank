@@ -1665,6 +1665,33 @@ function addon:ResetDB()
     self:Debug("DB Reset!")
 end
 
+--- Returns true if the main UI frame is currently visible.
+function addon:IsUIShown()
+    local existingMain = addon._guildBankMainFrame
+    if not (existingMain and existingMain.frame) then return false end
+    local ok, visible = pcall(function()
+        return existingMain.frame:IsShown()
+    end)
+    return ok and visible or false
+end
+
+--- Hides the main UI frame if it is currently shown.
+function addon:HideUI()
+    local existingMain = addon._guildBankMainFrame
+    if existingMain then
+        pcall(function() existingMain:Hide() end)
+    end
+end
+
+--- Toggles the main UI frame: closes it if open, otherwise opens it.
+function addon:ToggleUI()
+    if self:IsUIShown() then
+        self:HideUI()
+    else
+        self:ShowUI()
+    end
+end
+
 function addon:ShowUI()
     if not addon.loaded then
         self:TryLoadGuild()

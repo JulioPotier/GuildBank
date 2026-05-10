@@ -54,7 +54,7 @@ addon.LIBS = {
         type = 'data source',
         text = 'Beans!',
         icon = "Interface\\Icons\\inv_enchant_shardnexuslarge",
-        OnClick = function() addon:ShowUI() end
+        OnClick = function() addon:ToggleUI() end
     })
 }
 
