@@ -1,5 +1,5 @@
 ## Interface: 11507
-## Version: 0.1.0
+## Version: 0.3.0
 ## Title: Guild Bank
 ## Notes: Guild bank helper addon
 ## Forked from Bean Bank
