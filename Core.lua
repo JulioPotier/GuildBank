@@ -53,8 +53,11 @@ addon.LIBS = {
     libDB = LibStub('LibDataBroker-1.1'):NewDataObject(addonName, {
         type = 'data source',
         text = 'Beans!',
-        icon = "Interface\\Icons\\inv_enchant_shardnexuslarge",
-        OnClick = function() addon:ToggleUI() end
+        icon = "Interface\\Icons\\INV_Misc_Coin_02",
+        OnClick = function() addon:ToggleUI() end,
+        OnTooltipShow = function(tooltip)
+            tooltip:SetText("Guild Bank")
+        end,
     })
 }
 

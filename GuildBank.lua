@@ -1631,18 +1631,12 @@ function addon:RunMenu(input)
     if input == "" or input == "help" then 
         self:Print(ChatFrame1, "help: Shows this help menu")
         self:Print(ChatFrame1, "show: Opens the items UI")
-        self:Print(ChatFrame1, "resetdb: resets the SavedVariables database.")
-        self:Print(ChatFrame1, "resetperso: resets Personal data for current character.")
-        self:Print(ChatFrame1, "reset <CharacterName>: resets Personal data for specified character.")
-        self:Print(ChatFrame1, "enable: manually reenables the addon.")
+        self:Print(ChatFrame1, "reset all: clears all SavedVariables (full database reset).")
+        self:Print(ChatFrame1, "reset <CharacterName>: resets Personal data for that character.")
+        self:Print(ChatFrame1, "enable: turns the addon back on if it was disabled (db.profile.loaded = false). /reload after.")
         self:Print(ChatFrame1, "sync: requests a guild bank sync with other members.")
     elseif input == "show" then self:ShowUI()
-    elseif input == "resetdb" then self:ResetDB()
-    elseif input == "resetperso" then
-        if self.ResetPersonal then
-            self:ResetPersonal()
-            self:Print(ChatFrame1, "Personal data reset for current character.")
-        end
+    elseif command == "reset" and extraArgs == "all" then self:ResetDB()
     elseif command == "reset" and extraArgs and extraArgs ~= "" then
         if self.ResetPersonal then
             self:ResetPersonal(extraArgs)
@@ -1656,7 +1650,7 @@ end
 
 function addon:ReEnableAddon()
     self.db.profile.loaded = true
-    self:Print("Addon re-enabled! Perform a /reload to initialize.")
+    self:Print("Addon enabled again in settings. Type /reload so it loads fully.")
 end
 
 --- Resets the player's savedVariables database.
