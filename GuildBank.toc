@@ -1,8 +1,8 @@
 ## Interface: 11507
-## Version: 0.1.0
-## Title: Guild Bank
+## Version: 0.4.0
+## Title: Classic Guild Bank
 ## Notes: Guild bank helper addon
-## Forked from Bean Bank
+## Forked from BeanBank
 ## Author: Kirby2112
 ## SavedVariables: GuildBankDB
 
